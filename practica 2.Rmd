@@ -1,0 +1,729 @@
+---
+title: "Informe de la Práctica de Probabilidades y Estadística II"
+author: "24 de Mayo - 2021"
+subtitle: "Grupo nº47"
+lang: es-ES
+output:
+  pdf_document: 
+    toc: TRUE
+    toc_depth: 3
+---
+
+\newpage
+
+| Nombre | Apellidos        | Nº Matrícula | Email                                 |
+|--------|------------------|--------------|---------------------------------------|
+| Álvaro | Cabo Ciudad      | 200172       | alvaro.cabo\@alumnos.upm.es           |
+| Yoan   | Crul             | 200377       | y.crul\@alumnos.upm.es                |
+| Pablo  | Brasero Gonzalez | 200045       | pablo.braserogonzalez\@alumnos.upm.es |
+| Jorge  | García Plaza     | 200002       | jorge.gplaza\@alumnos.upm.es          |
+
+: Miembros de GII-4F1T
+
+## Introducción y uso de librerías
+
+Estas son las librerías que vamos a utilizar en el proyecto:
+
+```{r , message=FALSE, warning=FALSE}
+  require(readr)
+  require(e1071)
+  require(MASS)
+  
+  #extra
+  require(ggplot2)
+  require(fitdistrplus)
+  require(dplyr)
+  require(stests)
+  
+```
+
+La lista incluye algunas de librerías recomendadas
+
+-   Readr para leer el csv, e1071 para summary y funciones estadísticas entre otras
+
+Además de otras que hemos ido necesitando a medida que el proyecto iba creciendo
+
+-   Librerías gráficas o mejora de sintaxis: ggplot2, tidyverse
+
+-   Fitdistrplus, que a nuestro juicio hacía un mejor trabajo de ajuste que MASS
+
+-   stests, que utilizamos para calcular el intervalo de confianza de las varianzas y razón de varianzas
+
+# 1. Identificacion de Modelo y Muestreo
+
+### 1.a. Ajuste del modelo
+
+El primer paso era importar el dataset, usando read_csv
+
+```{r message=FALSE, warning=FALSE}
+  #En mi caso el dataset se encuentra en la carpeta de trabajo
+  Data <- read_csv(paste(getwd(),"PYE2DataSet47.csv", sep='/'))
+  
+```
+
+Para proceder a una primera descripción de los datos, empezando por *Sleeptime*
+
+```{r }
+print(summary(Data$sleeptime))
+```
+
+```{r , fig.width=3.5, fig.height=3}
+boxplot(Data$sleeptime,
+              xlab="Horas de sueno", ylab="Poblacion", main="Horas de sueno de la poblacion",
+              notch = TRUE, col="yellow")
+hist(Data$sleeptime, 
+           xlab="Horas de sueno", ylab="Poblacion", main="Horas de sueno de la poblacion",
+           col=c("orange", "yellow", "red"))
+```
+
+Y ahora *Number of Steps*
+
+```{r }
+print(summary(Data$sleeptime))
+```
+
+```{r , fig.width=3, fig.height=3}
+boxplot(Data$steps,
+              xlab="Pasos", ylab="Poblacion", main="Pasos de la poblacion",
+              notch = TRUE, col="cyan")
+hist(Data$steps, 
+           xlab="Pasos", ylab="Poblacion", main="Pasos de la poblacion",
+           col=c("blue", "purple", "cyan"))
+      
+```
+
+#### 1.1. Ajuste de Sleeptime
+
+Usando la librería fitdistrplus ajustamos los datos a las 3 distribuciones pedidas y observamos sus resultados
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+set.seed(2021)
+      normal <- fitdist(Data$sleeptime, "norm")
+      gamma <- fitdist(Data$sleeptime, "gamma")
+      exponential <- fitdist(Data$sleeptime, "exp")
+```
+
+**Ploteado de distribuciones**
+
+Para entender los datos, vamos a graficar un histograma y sobre él las 3 distribuciones a las que los hemos ajustado
+
+```{r , message=FALSE, warning=FALSE, fig.height=3.5, fig.align='center'}
+p <- denscomp(
+        list(normal, gamma, exponential),
+        legendtext = c("normal", "gamma", "exponential"),
+        xlab = "Horas de sueño",
+        ylab = "Densidad",
+        fitcol = c("red", "blue", "green"),
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE)
+      #Retocamos el plot para hacerlo más legible
+      p <- p +
+        ggplot2::ggtitle("Distribución de horas de sueño de la población") +
+        theme_bw() +
+        theme(legend.position = "bottom")
+      p
+```
+
+Se ve claramente que la distribución que mejor modela nuestros datos es la gamma, y comprobamos el ajuste evaluando la hipótesis de normalidad utilizando el *Test de Kolmogorov-Smirnov*
+
+```{r }
+d <- as.vector(Data$sleeptime) #vector de 100 elementos del dataset
+```
+
+```{r }
+test <- ks.test(d, pnorm, normal$estimate[1], normal$estimate[2])
+  
+  print(test)
+```
+
+Al ser una muestra muy grande, era altamente probable que hubiera rechazo de hipótesis de normalidad
+
+-   Comparamos el resultado del test con lo obtenido al graficar los datos con un Q-Q plot
+
+```{r , fig.align='center', fig.height=3, fig.width=4.5}
+qqnorm(Data$sleeptime)
+qqline(Data$sleeptime, col="red")
+```
+
+Vemos que no se ajusta a la linea de la normal, por lo que no va a haber hipótesis de normalidad
+
+### 1.2. Muestreo de datos
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#@params: 
+  set.seed(2021) 
+  size <- 20
+  
+  #Primero creo la matriz y luego la convierto a dataset para operar mejor
+  muestras1 <- matrix(0, ncol = 30, nrow = size )
+  
+  for (i in 1:30){
+    muestras1[,i] <- sample(Data$Age, size=size) #1 muestra por columna [20x30]
+  }
+  
+  
+  #Primero creo la matriz y luego la convierto a dataset para operar mejor
+  muestras2 <- matrix(0, nrow = size, ncol = 50)
+  
+  for (i in 1:50){
+    muestras2[,i] <- sample(Data$Age, size=size) #1 muestra por columna [20x50]
+  }
+  
+  
+  #Primero creo la matriz y luego la convierto a dataset para operar mejor
+  muestras3 <- matrix(0, nrow = size, ncol = 100)
+  
+  for (i in 1:100){
+    muestras3[,i] <- sample(Data$Age, size=size) #1 muestra por columna [20x100]
+  }
+  
+```
+
+#### Medias muestrales
+
+Gráficos de las Medias muestrales ajustadas a la normal
+
+```{r , fig.show="hold", out.width="33%"}
+
+#Función de cáculo de medias muestrales de una muestra
+
+mediaMuestral <-function(matrix){
+  media <- c()
+  for (i in 1:ncol(matrix)){
+     media[i] <- mean(matrix[,i])}
+  return(media)
+}
+
+m1 <-fitdist(mediaMuestral(muestras1), "norm")
+m2 <-fitdist(mediaMuestral(muestras2), "norm")
+m3 <-fitdist(mediaMuestral(muestras3), "norm")
+p1 <- denscomp(
+        m1,
+        xlab = "Media Muestral",
+        ylab = "Densidad 100 Muestras",
+        fitcol = "red",
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE)
+
+p2<- denscomp(
+        m2,
+        xlab =  "Media Muestral",
+        ylab = "Densidad 100 Muestras",
+        fitcol = "blue",
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE) 
+
+p3<-
+   denscomp(
+        m3,
+        xlab =  "Media Muestral",
+        ylab = "Densidad 100 Muestras",
+        fitcol = "green",
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE)
+p1
+p2
+p3
+
+```
+
+#### Varianzas muestrales
+
+Gráficos de las Varianzas muestrales ajustadas a la normal
+
+```{r , fig.show="hold", out.width="33%"}
+m1v <-fitdist(as.vector(var(muestras1)), "norm")
+m2v <- fitdist(as.vector(var(muestras2)), "norm")
+p2v<- denscomp(
+        m2v,
+        xlab =  "Variedad Muestral",
+        ylab = "Densidad",
+        fitcol = "blue",
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE) 
+
+
+p1v <- denscomp(
+        m1v,
+        xlab = "Variedad Muestral",
+        ylab = "Densidad",
+        fitcol = c("red"),
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE)
+m3v <- fitdist(as.vector(var(muestras3)), "norm")
+p3v<-
+   denscomp(
+        m3v,
+        xlab =  "Variedad Muestral",
+        ylab = "Densidad",
+        fitcol = "green",
+        fitlty = 1, 
+        xlegend = "topright",
+        plotstyle = "ggplot",
+        addlegend = FALSE)
+
+p1v
+p2v
+p3v
+```
+
+#### Proporción muestral entre Hombres y mujeres
+
+Para este caso he cogido 2 conjuntos de los 3 tamaños exigidos (30, 50, 100) y los he comparado
+
+```{r include=FALSE}
+#Volvemos a tomar las muestras, ahora teniendo en cuenta el sexo
+ set.seed(2021) 
+  size <- 20
+  
+   muestras1 <- sample_n(
+     Data,
+     30
+   )
+   muestras1 <- table(muestras1$Age, muestras1$Sex)
+   muestras2 <- sample_n(
+     Data,
+     50
+   )
+    muestras2 <- table(muestras2$Age, muestras2$Sex)
+   muestras3 <- sample_n(
+     Data,
+     100
+   )
+    muestras3 <- table(muestras3$Age, muestras3$Sex)
+ 
+```
+
+```{r , fig.show="hold", out.width="33%"}
+#Histograma hombre
+
+
+barplot(muestras1,
+     xlab="Nº de individuos de cada sexo",
+     main="Personas en cada grupo de edad (30 muestras)",
+)
+
+barplot(muestras2,
+     xlab="Nº de individuos de cada sexo",
+     main="Personas en cada grupo de edad (30 muestras)",
+)
+
+barplot(muestras3,
+     xlab="Nº de individuos de cada sexo",
+     main="Personas en cada grupo de edad (30 muestras)",
+)
+
+
+```
+
+\newpage
+
+# 2. Estimación Clásica (puntual, intervalos)
+
+### 2.a. Estimación Puntual
+
+Calculamos la media y varianza de Sleep y Steps de todos los datos
+
+```{r }
+set.seed(2021)
+mediaSleepAll <- mean(Data$sleeptime)
+cat("Media Sleep: ", mediaSleepAll)
+cat("Varianza Sleep: ", varSleepAll <- var(Data$sleeptime))
+cat("Media Steps: ", mediaStepsAll <- mean(Data$steps))
+cat("Varianza Steps: ", varStepsAll <- var(Data$steps))
+```
+
+Calculamos la media y varianza de Sleep y Steps de una muestra de 20
+
+```{r }
+set.seed(2021)
+size <- 20
+muestraSleep <- sample(Data$sleeptime, size=size)
+muestraSteps <- sample(Data$steps, size=size)
+cat("Media Sleep (20): ", mediaSleep20 <- mean(muestraSleep))
+cat("Varianza Sleep (20): ", varSleep20 <- var(muestraSleep))
+cat("Media Steps (20): ", mediaSteps20 <- mean(muestraSteps))
+cat("Varianza Steps (20): ", varSteps20 <- var(muestraSteps))
+```
+
+Calculamos la media y varianza de Sleep y Steps para todas las mujeres
+
+```{r }
+mujeres <- Data[Data$Sex == "M", ]
+cat("Media Sleep (Mujeres): ", mediaSleepMujeres <- mean(mujeres$sleeptime))
+cat("Varianza Sleep (Mujeres): ", varSleepMujeres <- var(mujeres$sleeptime))
+cat("Media Steps (Mujeres): ", mediaStepsMujeres <- mean(mujeres$steps))
+cat("Varianza Steps (Mujeres): ", varStepsMujeres <- var(mujeres$steps))
+```
+
+Calculamos la media y la varianza para una muestra de 20 mujeres
+
+```{r }
+set.seed(2021)
+size <- 20
+muestraSleepMujeres20 <- sample(mujeres$sleeptime, size=size)
+muestraStepsMujeres20 <- sample(mujeres$steps, size=size)
+cat("Media Sleep (Mujeres, 20): ", mediaSleepMujeres20 <- mean(muestraSleep))
+cat("Varianza Sleep (Mujeres, 20): ", varSleepMujeres20 <- var(muestraSleep))
+cat("Media Steps (Mujeres, 20): ", mediaStepsMujeres20 <- mean(muestraSteps))
+cat("Varianza Steps (Mujeres, 20): ", varStepsMujeres20 <- var(muestraSteps))
+```
+
+Calculamos la media y varianza de Sleep y Steps para todos los hombres
+
+```{r }
+hombres <- Data[Data$Sex =="V", ]
+cat("Media Sleep (Hombres): ", mediaSleepHombres <- mean(hombres$sleeptime))
+cat("Varianza Sleep (Hombres): ", varSleepHombres <- var(hombres$sleeptime))
+cat("Media Steps (Hombres): ", mediaStepsHombres <- mean(hombres$steps))
+cat("Varianza Steps (Hombres): ", varStepsHombres <- var(hombres$steps))
+```
+
+Calculamos la media y la varianza de Sleep y Steps para una muestra de 20 hombres
+
+```{r }
+set.seed(2021)
+size <- 20
+muestraSleepHombres20 <- sample(hombres$sleeptime, size=size)
+muestraStepsHombres20 <- sample(hombres$steps, size=size)
+cat("Media Sleep (Hombres, 20): ", mediaSleepHombres20 <- mean(muestraSleep))
+cat("Varianza Sleep (Hombres, 20): ", varSleepHombres20 <- var(muestraSleep))
+cat("Media Steps (Hombres, 20): ", mediaStepsHombres20 <- mean(muestraSteps))
+cat("Varianza Steps (Hombres, 20): ", varStepsHombres20 <- var(muestraSteps))
+```
+
+### 2.b Estimación de intervalos
+
+#### 1) Estimacion del intervalo de confianza para la media, varianza, proporcion, al nivel de confianza 90%,95% y 99 %
+
+Calculamos los intervalos de confianza de la media de sleep y steps de una muestra de 20 Hombres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la media Sleep de una muestra de 20 Hombres:
+    ", intervalo90MediaSleepHombres20 <- t.test(x=muestraSleepHombres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la media Sleep de una muestra de 20 Hombres:
+    ", intervalo95MediaSleepHombres20 <- t.test(x=muestraSleepHombres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la media Sleep de una muestra de 20 Hombres:
+    ", intervalo99MediaSleepHombres20 <- t.test(x=muestraSleepHombres20, conf.level = 0.99)$conf.int)
+cat("Intervalo de confianza del 90% de la media Steps de una muestra de 20 Hombres:
+    ", intervalo90MediaStepsHombres20 <- t.test(x=muestraStepsHombres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la media Steps de una muestra de 20 Hombres:
+    ", intervalo95MediaStepsHombres20 <- t.test(x=muestraStepsHombres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la media Steps de una muestra de 20 Hombres:
+    ", intervalo99MediaStepsHombres20 <- t.test(x=muestraStepsHombres20, conf.level = 0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la varianza de sleep y steps de una muestra de 20 Hombres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la varianza Sleep de una muestra de 20 Hombres:
+    ", intervalo90VarSleepHombres20 <- var.test(x=muestraSleepHombres20, muestraSleepHombres20,conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la varianza Sleep de una muestra de 20 Hombres:
+    ", intervalo95VarleepHombres20 <- var.test(x=muestraSleepHombres20, muestraSleepHombres20,conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la varianza Sleep de una muestra de 20 Hombres:
+    ", intervalo99VarSleepHombres20 <- var.test(x=muestraSleepHombres20, muestraSleepHombres20,conf.level = 0.99)$conf.int)
+cat("Intervalo de confianza del 90% de la varianza Steps de una muestra de 20 Hombres:
+    ", intervalo90VarStepsHombres20 <- var.test(x=muestraStepsHombres20,muestraSleepHombres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la varianza Steps de una muestra de 20 Hombres:
+    ", intervalo95VarStepsHombres20 <- var.test(x=muestraStepsHombres20,muestraSleepHombres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la varianza Steps de una muestra de 20 Hombres:
+    ", intervalo99VarStepsHombres20 <- var.test(x=muestraStepsHombres20,muestraSleepHombres20, conf.level = 0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la media de sleep y steps de una muestra de 20 Mujeres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la media Sleep de una muestra de 20 Mujeres:
+    ", intervalo90MediaSleepMujeres20 <- t.test(x=muestraSleepMujeres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la media Sleep de una muestra de 20 Mujeres:
+    ", intervalo95MediaSleepMujeres20 <- t.test(x=muestraSleepMujeres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la media Sleep de una muestra de 20 Mujeres:
+    ", intervalo99MediaSleepMujeres20 <- t.test(x=muestraSleepMujeres20, conf.level = 0.99)$conf.int)
+cat("Intervalo de confianza del 90% de la media Steps de una muestra de 20 Mujeres:
+    ", intervalo90MediaStepsMujeres20 <- t.test(x=muestraStepsMujeres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la media Steps de una muestra de 20 Mujeres:
+    ", intervalo95MediaStepsMujeres20 <- t.test(x=muestraStepsMujeres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la media Steps de una muestra de 20 Mujeres:
+    ", intervalo99MediaStepsMujeres20 <- t.test(x=muestraStepsMujeres20, conf.level = 0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la varianza de sleep y steps de una muestra de Mujeres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la varianza Sleep de una muestra de 20 Mujeres:
+    ", intervalo90VarSleepMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la varianza Sleep de una muestra de 20 Mujeres:
+    ", intervalo95VarSleepMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la varianza Sleep de una muestra de 20 Mujeres:
+    ", intervalo99VarSleepMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.99)$conf.int)
+cat("Intervalo de confianza del 90% de la varianza Steps de una muestra de 20 Mujeres:
+    ", intervalo90VarStepsMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la varianza Steps de una muestra de 20 Mujeres:
+    ", intervalo95VarStepsMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la varianza Steps de una muestra de 20 Mujeres:
+    ", intervalo99VarStepsMujeres20 <- var.test(x=muestraSleepMujeres20,muestraSleepMujeres20, conf.level = 0.99)$conf.int)
+```
+
+#### 2) Estimacion del intervalo de confianza para la diferencia de medias, razon de varianzas, proporcion, al nivel de confianza 90%, 95% y 99%
+
+Calculamos los intervalos de confianza de la diferencia de la media de sleep de una muestra de 20 hombres y una muestra de 20 muejres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo90DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo95DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo99DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la diferencia de la media de steps de una muestra de 20 hombres y una muestra de 20 muejres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo90DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo95DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la diferencia de las 
+medias sleep entre hombres y mujeres:
+    ", intervalo99DifMediasHombres20 <- t.test(x=muestraStepsMujeres20, y=muestraStepsHombres20, paired=FALSE, var.equal = FALSE, conf.level = 0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la razón de varianzas de sleep de una muestra de 20 hombres y una muestra de 20 mujeres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la razón de varianzas de Sleep entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la razón de varianzas de Sleep entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la razón de varianzas de Sleep entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.99)$conf.int)
+```
+
+Calculamos los intervalos de confianza de la razón de varianzas de steps de una muestra de 20 hombres y una muestra de 20 mujeres, a niveles de confianza 90%, 95%, 99%, suponiendo normalidad
+
+```{r }
+cat("Intervalo de confianza del 90% de la razón de varianzas de Steps entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.90)$conf.int)
+cat("Intervalo de confianza del 95% de la razón de varianzas de Steps entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.95)$conf.int)
+cat("Intervalo de confianza del 99% de la razón de varianzas de Steps entre hombres y mujeres: 
+    ", intervalo90RazVarSleep <- var.test(x=muestraStepsHombres20, y=muestraStepsMujeres20, conf.level=0.99)$conf.int)
+```
+
+\newpage
+
+# 3.- ESTIMACIÓN BAYESIANA
+
+Vamos a crear ima muestra de tamaño 20 tal y como se necesita segun el enunciado
+
+```{r echo =FALSE}
+muestra20 <- Data[sample(1:nrow(Data),20),]
+nE <- sum(muestra20$Nation == 'SP')
+20 - nE
+nE/20
+```
+
+## a) Obtener la pe tras la informacion aportada por la muestra
+
+```{r , fig.height=4.5, fig.width=7}
+dummyVec_Esp <- ifelse(muestra20$Nation == "SP", 1,0)
+aP=13     #alfa a posteriori (de mi distribución Beta a posteriori)
+bP=22     #beta a posteriori (de mi distribución Beta a posteriori)
+
+
+#necesitamos un vector para pasarselo a la funcion beta, lo calculamos y aplicamos la funcion
+vector_beta <- seq(0, 1, by = 0.001)
+funcion_beta <- dbeta(vector_beta, shape1 = aP, shape2 = bP)  
+plot(funcion_beta) 
+```
+
+## b) Obtener el IC con 95% de confianza para la pe
+
+Para hallar el intervalo de confianza deseado usamos qbeta, siendo el primer parametro el valor del cuantil deseado, el segundo parametro es alfa y el tercer parametro el beta
+
+```{r }
+aP=13 
+bP=22
+qbeta(0.975, aP, bP)
+qbeta(0.025, aP, bP)
+```
+
+## c) Estimar con la muestra anterior, la estatura con varianza conocida.
+
+```{r }
+#Filtramos y vemos si df ha sufrido algun cambio
+muestra20_esp_it_fr <- muestra20[muestra20$Nation=="SP" | muestra20$Nation=="IT" | muestra20$Nation=="FR",]
+head(muestra20_esp_it_fr)
+vec_alturas <- muestra20_esp_it_fr$height
+mean(vec_alturas)
+var(vec_alturas)
+```
+
+```{r}
+#Obtenemos cuartil 0.025 sabiendo que n = 14 pues el valor de df ha cambiado previamente.
+qt(p=0.975, df = 3, lower.tail = TRUE, log.p = FALSE)
+```
+
+\pagebreak
+
+\newpage
+
+# 4.- CONTRASTES (PARAMÉTRICOS Y NO PARAMÉTRICOS)
+
+## 4.1- CONTRASTES PARAMÉTRICOS
+
+Contrastar si la media mu1 de Sample1 es Q1 \<= mu1, con varianza desconocida (Q1 : cuartil 1 de la muestra)
+
+```{r }
+set.seed(2022)
+#Generamos las muestras aleatorias de tamaño 20
+muestra1_apartado4 <- sample(Data$IMC,size=20)
+muestra2_apartado4 <- sample(Data$IMC,size=20)
+#Almacenamos el cuartil 1
+q1 <- quantile(muestra1_apartado4,0.25)
+#Siendo el cuartil 25% 24.60137, contrastamos 
+t.test(muestra1_apartado4, alternative="less", mu=q1)
+#Puesto que p-value es 0.9923 y la media es 24.97518, no rechazamos la hipótesis nula
+# y comprobamos que el cuartil 25% es menor que la media
+```
+
+### Contrastar si la media mu1 de Sample1 es mu1 \<= Q3, con varianza desconocida
+
+```{r }
+q3 <- quantile(muestra1_apartado4, 0.75)
+t.test(muestra1_apartado4, alternative="greater",mu=q3)
+#Puesto que p-value es 0.9712, aceptamos la hipótesis nula de que la media es menor que el #tercer cuartil
+```
+
+### Contrastar si la varianza sigma2 de Sample1 es mayor que 1.0, con media desconocida
+
+```{r }
+library(TeachingDemos)
+sigma.test(muestra1_apartado4, sigma=1, alterantive="less")
+#aceptamos la alternativa de que es menor puesto que p-value es 0.0176 y #var(muestra1_apartado4) = 0.3935399 < 1
+```
+
+### Contrastar si mu1 - mu2 = 0, con Sample1 y Sample2 respectivamente, con varianzas desconocidas
+
+```{r }
+t.test(muestra1_apartado4,muestra2_apartado4, paired=TRUE)
+#Como p-value = 0.8858, en un intervalo de confianza del 95%, aceptamos la hipostesis nula
+#de que la diferencia de las medias es 0
+```
+
+### Contrastar si varianza sigma1/ varianza sigma2 = 1, con Sample1 y Sample2 respectivamente
+
+```{r }
+var.test(muestra1_apartado4,muestra2_apartado4)
+#Como p-value = 0.6645, en un intervalo de confianza del 95%, aceptamos la hipostesis nula
+#de que la division de las varianzas es igual a 1
+```
+
+## 4.2- CONTRASTES PARAMÉTRICOS
+
+Contrastar la normalidad de Sample, mediante el test de Pearson y el test de #Kolmogorov-Smirnov
+
+```{r }
+set.seed(2022)
+library(MASS)
+#Creamos la muestra aleatoria de tamaño 20
+muestra3_apartado4 <- sample(Data$IMC,size=20)
+fitdistr(muestra3_apartado4,c("normal"))
+pnorm <- pnorm(20,24.97517790,0.61144326)
+ks.test(muestra3_apartado4, pnorm, 24.97517790, 0.61144326)
+```
+
+### Contrastar la independencia de Sample, mediante el test de Durbin-Watson
+
+```{r }
+library(lmtest)
+muestra6_apartado4 <- sample(Data$IMC,size=20)
+lm <- lm(IMC ~ Data$height + Data$weight, data = Data)
+dwtest(lm)
+```
+
+### Contrastar la homogeneidad de Sample, mediante el test de Wilcoxon
+
+```{r }
+muestra4_apartado4 <- sample(Data$IMC,size=20)
+muestra5_apartado4 <- sample(Data$IMC,size=20)
+wilcox.test(x = muestra4_apartado4, y = muestra5_apartado4, 
+            alternative = "two.sided", mu = 0,
+            paired = FALSE, conf.int = 0.95)
+```
+
+# 5.- REGRESIÓN LINEAL SIMPLE (ESTIMACIÓN Y CONTRASTE)
+
+### 5.a.Estimación del modelo de regresión simple
+
+```{r }
+set.seed(2022)
+df <- data.frame(Data)
+
+#  Muestra de n=20 del dataframe completo
+df_20 <- df[sample(1:nrow(df),20),]
+
+#Modelo de regresi?n lineal simple
+regresion <- lm(height~weight, data=df_20)
+summary(regresion)
+
+plot(df_20$weight, df_20$height, xlab='weight', ylab='height')
+abline(regresion)
+
+#Predicciones: Predecimos alturas para diferentes pesos
+nuevos.pesos <- data.frame(weight =seq(60, 80))
+predict(regresion, nuevos.pesos)
+
+#Inferencia en el modelo de regresion simple
+confint(regresion)
+
+
+#Representamos intervalos de confianza para la respuesta media y los intervalos de predicci?n (en rojo)
+plot(df_20$height, df_20$weight, xlab='height', ylab='weight')
+abline(lm(weight~height, data=df_20))
+
+ic <- predict(regresion, nuevos.pesos, interval = 'confidence')
+lines(nuevos.pesos$weight, ic[,2], lty = 2)
+lines(nuevos.pesos$weight, ic[,3], lty = 2)
+
+ic <- predict(regresion, nuevos.pesos, interval = 'prediction')
+lines(nuevos.pesos$weight, ic[,2], lty = 2, col= 'red')
+lines(nuevos.pesos$weight, ic[,3], lty = 2, col = 'red')
+
+# Tabla de an?lisis de la varianza de los errores con el comando ANOVA:
+anova(regresion)
+```
+
+### 5.b.Contraste de regresión
+
+```{r }
+
+#Representamos los residuos estandarizados frente a los valores ajustados
+
+residuos <- rstandard(regresion)
+valores.ajustados <- fitted(regresion)
+plot(valores.ajustados, residuos)
+
+#Comprobamos la hip?tesis de normalidad con un QQPlot
+qqnorm(residuos)
+qqline(residuos)
+
+```
